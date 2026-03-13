@@ -7,11 +7,12 @@
 // ── State ────────────────────────────────────────────────────────────────────
 let state = {
   tabId: null,
-  apiKey: null,
+  ephemeralKey: null,
   streamId: null,
 
   // Media / Audio
   mediaStream: null,
+  audioElement: null,   // keeps tab audio audible while we process it
   audioContext: null,
   sourceNode: null,
   processorNode: null,
@@ -43,12 +44,13 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   const { action } = request;
 
   if (action === "startOffscreenCapture") {
-    const { streamId, apiKey, tabId } = request;
+    const { streamId, ephemeralKey, tabId } = request;
     console.log("[Offscreen] Received startOffscreenCapture", {
       tabId,
       streamId: streamId?.slice(0, 8) + "...",
+      hasEphemeralKey: !!ephemeralKey,
     });
-    startCapture(streamId, apiKey, tabId)
+    startCapture(streamId, ephemeralKey, tabId)
       .then(() => sendResponse({ success: true }))
       .catch((err) => {
         console.error("[Offscreen] startCapture failed:", err);
@@ -67,12 +69,12 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
 // ── Core Functions ────────────────────────────────────────────────────────────
 
-async function startCapture(streamId, apiKey, tabId) {
+async function startCapture(streamId, ephemeralKey, tabId) {
   // Clean up any previous session
   stopCapture();
 
   state.streamId = streamId;
-  state.apiKey = apiKey;
+  state.ephemeralKey = ephemeralKey;
   state.tabId = tabId;
 
   // ── 1. Acquire the tab audio stream ───────────────────────────────────────
@@ -89,6 +91,20 @@ async function startCapture(streamId, apiKey, tabId) {
     });
     state.mediaStream = stream;
     console.log("[Offscreen] ✅ getUserMedia succeeded – got tab audio stream");
+
+    // ── Play the captured stream back through speakers so the user can still
+    //    hear the video. Chrome mutes the original tab audio when it is captured;
+    //    routing it through an <audio> element in the offscreen doc restores it.
+    state.audioElement = document.createElement("audio");
+    state.audioElement.srcObject = stream;
+    state.audioElement.volume = 1.0;
+    document.body.appendChild(state.audioElement);
+    try {
+      await state.audioElement.play();
+      console.log("[Offscreen] ✅ Audio element playing – tab audio restored");
+    } catch (playErr) {
+      console.warn("[Offscreen] Audio element play() failed (non-fatal):", playErr.message);
+    }
   } catch (err) {
     console.error("[Offscreen] ❌ getUserMedia failed:", err);
     notifyBackground("captureError", { error: err.message });
@@ -124,6 +140,12 @@ function stopCapture() {
     state.ws = null;
   }
 
+  if (state.audioElement) {
+    try { state.audioElement.pause(); state.audioElement.srcObject = null; } catch (_) {}
+    if (state.audioElement.parentNode) state.audioElement.parentNode.removeChild(state.audioElement);
+    state.audioElement = null;
+  }
+
   if (state.processorNode) {
     try {
       state.processorNode.disconnect();
@@ -155,6 +177,7 @@ function stopCapture() {
   state.speechDetected = false;
   state.silenceCounter = 0;
   state.wsReconnectAttempts = 0;
+  state.ephemeralKey = null;
 
   console.log("[Offscreen] Capture stopped.");
 }
@@ -167,7 +190,14 @@ function connectWebSocket() {
       "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17";
     console.log("[Offscreen] Opening WebSocket to OpenAI Realtime API...");
 
-    const ws = new WebSocket(wsUrl);
+    // Browser WebSocket cannot set the Authorization header, so we pass the
+    // ephemeral key (obtained via fetch in background.js) via the subprotocols
+    // array – the officially supported browser auth mechanism for the Realtime API.
+    const ws = new WebSocket(wsUrl, [
+      "realtime",
+      `openai-insecure-api-key.${state.ephemeralKey}`,
+      "openai-beta.realtime-v1",
+    ]);
     state.ws = ws;
 
     ws.onopen = () => {
@@ -197,15 +227,8 @@ function connectWebSocket() {
 }
 
 function configureSession(ws) {
-  // Authenticate first
-  ws.send(
-    JSON.stringify({
-      type: "auth",
-      api_key: state.apiKey,
-    }),
-  );
-
-  // Configure session
+  // NOTE: Authentication was already handled via WebSocket subprotocol.
+  // No "auth" message needed – just configure the session.
   ws.send(
     JSON.stringify({
       type: "session.update",

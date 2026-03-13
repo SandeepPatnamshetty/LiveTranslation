@@ -320,10 +320,78 @@ class TranslationManager {
     }
   }
 
+  /**
+   * Create an ephemeral OpenAI Realtime session key.
+   * Background service workers can set arbitrary fetch headers, so we do auth here
+   * and hand only the short-lived client_secret down to the offscreen document.
+   * @param {string} apiKey - OpenAI API key
+   * @returns {Promise<string>} Ephemeral client_secret value
+   */
+  async createEphemeralSessionKey(apiKey) {
+    console.log(
+      "[Background] Creating ephemeral OpenAI Realtime session key...",
+    );
+
+    const response = await fetch(
+      "https://api.openai.com/v1/realtime/sessions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-realtime-preview-2024-12-17",
+          voice: "alloy",
+          modalities: ["audio", "text"],
+          instructions:
+            "You are a real-time translator. Translate the spoken audio to English. Provide only the translation, no explanations or preamble. Be concise and accurate.",
+          input_audio_format: "pcm16",
+          output_audio_format: "pcm16",
+          input_audio_transcription: { model: "whisper-1" },
+          turn_detection: null,
+          temperature: 0.6,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(
+        `Failed to create ephemeral session: ${response.status} – ${err?.error?.message || response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    const ephemeralKey = data?.client_secret?.value;
+    if (!ephemeralKey) {
+      throw new Error(
+        "Ephemeral key missing in /v1/realtime/sessions response",
+      );
+    }
+
+    console.log("[Background] ✅ Ephemeral session key obtained");
+    return ephemeralKey;
+  }
+
   async initializeAudioProcessor(tabId, streamId, apiKey) {
     console.log(
       `[Background] Creating/reusing offscreen document for tab ${tabId}...`,
     );
+
+    // ── Get ephemeral key (background can set headers; offscreen/content cannot) ──
+    let ephemeralKey;
+    try {
+      ephemeralKey = await this.createEphemeralSessionKey(apiKey);
+    } catch (err) {
+      console.error(
+        "[Background] ❌ Failed to create ephemeral key:",
+        err.message,
+      );
+      // Fall back to raw API key so the WebSocket can still attempt auth
+      // (works in dev; prod should always use ephemeral tokens)
+      ephemeralKey = apiKey;
+    }
 
     // Ensure offscreen document exists
     let hasDoc = false;
@@ -344,13 +412,13 @@ class TranslationManager {
       console.log("[Background] Offscreen document already exists, reusing");
     }
 
-    // Send streamId and apiKey to offscreen document
+    // Send streamId and ephemeral key to offscreen document
     const startTime = Date.now();
     chrome.runtime.sendMessage(
       {
         action: "startOffscreenCapture",
         streamId,
-        apiKey,
+        ephemeralKey,
         tabId,
       },
       (response) => {
