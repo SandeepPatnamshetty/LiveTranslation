@@ -3,7 +3,7 @@
   "name": "Real-Time Video Translator",
   "version": "1.0.0",
   "description": "Translate video audio to English in real-time on any website",
-  "permissions": ["tabCapture", "activeTab", "storage", "scripting"],
+  "permissions": ["tabCapture", "activeTab", "tabs", "storage", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

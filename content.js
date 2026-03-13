@@ -858,100 +858,60 @@
      * @param {string} apiKey - OpenAI API key
      */
     async initializeAudioCapture(streamId, apiKey) {
-      console.log(
-        "[VideoTranslator] Initializing audio capture with stream ID:",
-        streamId,
-      );
-
       // Check if we're in an iframe - tab capture only works from top-level window
       const isInIframe = window.self !== window.top;
       if (isInIframe) {
-        console.error(
-          "[VideoTranslator] ❌ Cannot capture audio from iframe - tab capture requires top-level window",
-        );
-        throw new Error(
-          "Tab audio capture not allowed in iframes. This is a browser security restriction.",
-        );
+        throw new Error("Tab audio capture not allowed in iframes.");
       }
 
+      console.log(
+        `[VideoTranslator] 🎵 Starting audio capture. StreamId: ${streamId}`,
+      );
+
       try {
-        console.log(
-          "[VideoTranslator] ========== STARTING AUDIO CAPTURE ==========",
-        );
-        console.log("[VideoTranslator] StreamId received:", streamId);
-        console.log("[VideoTranslator] StreamId type:", typeof streamId);
-        console.log(
-          "[VideoTranslator] StreamId length:",
-          streamId ? streamId.length : 0,
-        );
-        console.log(
-          "[VideoTranslator] Is in iframe:",
-          window.self !== window.top,
-        );
-        console.log("[VideoTranslator] Window location:", window.location.href);
-        console.log("[VideoTranslator] Document state:", document.readyState);
-
-        // Try newer constraint format first (Manifest V3)
-        const constraints = {
-          audio: {
-            chromeMediaSourceId: streamId,
-            chromeMediaSource: "tab",
-          },
-        };
-
-        console.log(
-          "[VideoTranslator] Using constraints:",
-          JSON.stringify(constraints, null, 2),
-        );
-
+        // getUserMedia with tab capture streamId
+        // The correct format for Chrome extensions with Manifest V3
         let stream;
         try {
-          console.log(
-            "[VideoTranslator] Attempting getUserMedia with new format...",
-          );
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          console.log("[VideoTranslator] ✅ SUCCESS with new format!");
-        } catch (err1) {
-          console.error("[VideoTranslator] ❌ New format failed:", {
-            name: err1.name,
-            message: err1.message,
-            constraint: err1.constraint,
-          });
-
-          // Try legacy format with mandatory
-          console.log("[VideoTranslator] Trying legacy mandatory format...");
-          const legacyConstraints = {
+          // Format 1: Modern Chrome (post 2021)
+          stream = await navigator.mediaDevices.getUserMedia({
             audio: {
               mandatory: {
                 chromeMediaSource: "tab",
                 chromeMediaSourceId: streamId,
               },
             },
-          };
-
-          console.log(
-            "[VideoTranslator] Legacy constraints:",
-            JSON.stringify(legacyConstraints, null, 2),
+            video: false,
+          });
+          console.log("[VideoTranslator] ✅ Got stream with mandatory format");
+        } catch (e1) {
+          console.error(
+            `[VideoTranslator] Format 1 failed: ${e1.name}: ${e1.message}`,
           );
-
           try {
-            stream =
-              await navigator.mediaDevices.getUserMedia(legacyConstraints);
-            console.log("[VideoTranslator] ✅ SUCCESS with legacy format!");
-          } catch (err2) {
-            console.error("[VideoTranslator] ❌ Legacy format also failed:", {
-              name: err2.name,
-              message: err2.message,
-              constraint: err2.constraint,
-              stack: err2.stack,
+            // Format 2: without video: false
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                mandatory: {
+                  chromeMediaSource: "tab",
+                  chromeMediaSourceId: streamId,
+                },
+              },
             });
-            throw err2;
+            console.log("[VideoTranslator] ✅ Got stream with format 2");
+          } catch (e2) {
+            console.error(
+              `[VideoTranslator] Format 2 failed: ${e2.name}: ${e2.message}`,
+            );
+            // ALL formats failed - throw full details
+            throw new Error(
+              `getUserMedia failed. Format1: ${e1.message}. Format2: ${e2.message}. StreamId length: ${streamId?.length}. IsIframe: ${isInIframe}`,
+            );
           }
         }
 
-        console.log("[VideoTranslator] ✅ Got media stream successfully", {
-          streamId: stream.id,
-          audioTracks: stream.getAudioTracks().length,
+        console.log("[VideoTranslator] ✅ Media stream acquired:", {
+          trackCount: stream.getAudioTracks().length,
           active: stream.active,
         });
 

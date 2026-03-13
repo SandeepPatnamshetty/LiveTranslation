@@ -230,79 +230,31 @@ class TranslationManager {
    */
   async requestTabCapture(tabId) {
     return new Promise((resolve, reject) => {
-      console.log(`[Background] Requesting tab capture for tab ${tabId}...`);
+      console.log(
+        `[Background] Requesting tab capture streamId for tab ${tabId}...`,
+      );
 
-      // Ensure the tab is active before requesting capture
-      chrome.tabs.get(tabId, (tab) => {
+      chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (streamId) => {
         if (chrome.runtime.lastError) {
           console.error(
-            "[Background] Error getting tab:",
-            chrome.runtime.lastError,
+            "[Background] ❌ getMediaStreamId error:",
+            chrome.runtime.lastError.message,
           );
           reject(new Error(chrome.runtime.lastError.message));
           return;
         }
-
-        if (!tab.active) {
-          console.warn(
-            `[Background] ⚠️ Tab ${tabId} is not active, capture may fail`,
-          );
+        if (!streamId) {
+          reject(new Error("No stream ID returned from tabCapture"));
+          return;
         }
-
-        console.log(`[Background] Tab status:`, {
-          id: tab.id,
-          active: tab.active,
-          url: tab.url,
-          audible: tab.audible,
-        });
-
-        // Use getMediaStreamId for Manifest V3 compatibility
         console.log(
-          `[Background] Calling chrome.tabCapture.getMediaStreamId for tab ${tabId}...`,
+          `[Background] ✅ Got streamId (length: ${streamId.length})`,
         );
-
-        chrome.tabCapture.getMediaStreamId(
-          {
-            targetTabId: tabId,
-          },
-          (streamId) => {
-            if (chrome.runtime.lastError) {
-              console.error(
-                "[Background] ❌ Tab capture error:",
-                chrome.runtime.lastError.message,
-                "\nFull error:",
-                chrome.runtime.lastError,
-              );
-              reject(new Error(chrome.runtime.lastError.message));
-              return;
-            }
-
-            if (!streamId) {
-              console.error(
-                "[Background] ❌ No stream ID returned from tabCapture",
-              );
-              reject(new Error("No stream ID returned from tabCapture"));
-              return;
-            }
-
-            console.log(`[Background] ✅ Got stream ID:`, {
-              streamId: streamId,
-              type: typeof streamId,
-              length: streamId.length,
-              preview: streamId.substring(0, 20) + "...",
-            });
-            resolve(streamId);
-          },
-        );
+        resolve(streamId);
       });
     });
   }
 
-  /**
-   * Store stream ID for a tab
-   * @param {number} tabId - The tab ID
-   * @param {string} streamId - The stream ID
-   */
   storeStreamIdForTab(tabId, streamId) {
     const session = this.activeSessions.get(tabId);
     if (session) {
@@ -310,48 +262,36 @@ class TranslationManager {
     }
   }
 
-  /**
-   * Initialize audio processor in tab context
-   * @param {number} tabId - The tab ID
-   * @param {string} streamId - The stream ID
-   * @param {string} apiKey - OpenAI API key
-   */
   async initializeAudioProcessor(tabId, streamId, apiKey) {
-    // Audio processor is now pre-loaded as a content script (see manifest.json)
-    // This eliminates the 100-500ms script injection delay
-    // Tab capture only works from the top-level window due to browser security
-    try {
-      const startTime = Date.now();
-      console.log(
-        `[Background] Sending audio processor init message to tab ${tabId} (streamId: ${streamId.substr(0, 10)}...)`,
-      );
+    const startTime = Date.now();
+    console.log(
+      `[Background] Sending initAudioProcessor to tab ${tabId} main frame...`,
+    );
 
-      // Send initialization message to content script in MAIN FRAME ONLY (frameId: 0)
-      // This prevents iframes from trying to capture audio (which fails due to permissions)
-      // CRITICAL: Send this IMMEDIATELY to avoid streamId expiration (streamIds expire quickly!)
-      chrome.tabs.sendMessage(
-        tabId,
-        {
-          action: "initAudioProcessor",
-          apiKey,
-          streamId,
-          timestamp: Date.now(), // Track when message was sent
-        },
-        {
-          frameId: 0, // Target main frame only, not iframes
-        },
-      );
-
-      console.log(
-        `[Background] Initialization message sent to main frame (total time: ${Date.now() - startTime}ms)`,
-      );
-    } catch (error) {
-      console.error(
-        "[Background] Failed to initialize audio processor:",
-        error,
-      );
-      throw error;
-    }
+    // Send to main frame ONLY (frameId: 0) - iframes cannot capture tab audio
+    chrome.tabs.sendMessage(
+      tabId,
+      {
+        action: "initAudioProcessor",
+        apiKey,
+        streamId,
+        timestamp: Date.now(),
+      },
+      { frameId: 0 },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            `[Background] ❌ initAudioProcessor message failed:`,
+            chrome.runtime.lastError.message,
+          );
+        } else {
+          console.log(
+            `[Background] ✅ initAudioProcessor response (${Date.now() - startTime}ms):`,
+            response,
+          );
+        }
+      },
+    );
   }
 
   /**
