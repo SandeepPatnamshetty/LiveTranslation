@@ -26,7 +26,10 @@
      * Initialize the video translator
      */
     async init() {
-      console.log("[VideoTranslator] Initializing...");
+      const isInIframe = window.self !== window.top;
+      console.log(
+        `[VideoTranslator] Initializing... (In iframe: ${isInIframe})`,
+      );
 
       // Load settings from storage
       await this.loadSettings();
@@ -196,6 +199,9 @@
      * @returns {HTMLElement} The overlay element
      */
     createOverlay(video) {
+      const isInIframe = window.self !== window.top;
+      console.log(`[VideoTranslator] 🎨 Creating overlay (In iframe: ${isInIframe}, URL: ${document.location.href})`);
+      
       const overlay = document.createElement("div");
       overlay.className = "video-translator-overlay";
       overlay.setAttribute("data-video-id", this.generateVideoId(video));
