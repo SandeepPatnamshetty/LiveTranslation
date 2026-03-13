@@ -119,7 +119,7 @@
      */
     setupVideo(video) {
       console.log("[VideoTranslator] 🎬 Setting up video element:", video);
-      
+
       const overlay = this.createOverlay(video);
       const overlayData = {
         element: overlay,
@@ -129,11 +129,11 @@
       };
 
       this.videos.set(video, overlayData);
-      
+
       console.log("[VideoTranslator] ✅ Video setup complete", {
         videoElement: video,
         overlayElement: overlay,
-        videosMapSize: this.videos.size
+        videosMapSize: this.videos.size,
       });
 
       // Position overlay relative to video (simplified for now)
@@ -425,9 +425,9 @@
         zIndex: overlayData.element.style.zIndex,
         bottom: overlayData.element.style.bottom,
         left: overlayData.element.style.left,
-        elementHTML: overlayData.element.outerHTML.substring(0, 200)
+        elementHTML: overlayData.element.outerHTML.substring(0, 200),
       });
-      
+
       // Extra debugging - log position relative to viewport
       const rect = overlayData.element.getBoundingClientRect();
       console.log("[VideoTranslator] 📍 Overlay position on screen:", {
@@ -437,17 +437,11 @@
         right: rect.right,
         width: rect.width,
         height: rect.height,
-        isInViewport: rect.top >= 0 && rect.left >= 0 && 
-                      rect.bottom <= window.innerHeight && 
-                      rect.right <= window.innerWidth
-      });
-    }
-
-      console.log("[VideoTranslator] ✅ Overlay made always visible", {
-        hasElement: !!overlayData.element,
-        isInDOM: document.body.contains(overlayData.element),
-        classes: overlayData.element.className,
-        position: overlayData.element.style.position,
+        isInViewport:
+          rect.top >= 0 &&
+          rect.left >= 0 &&
+          rect.bottom <= window.innerHeight &&
+          rect.right <= window.innerWidth,
       });
     }
 
