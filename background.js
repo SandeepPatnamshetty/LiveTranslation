@@ -192,12 +192,12 @@ class TranslationManager {
    */
   async requestTabCapture(tabId) {
     return new Promise((resolve, reject) => {
-      chrome.tabCapture.capture(
+      // Use getMediaStreamId for Manifest V3 compatibility
+      chrome.tabCapture.getMediaStreamId(
         {
-          audio: true,
-          video: false,
+          targetTabId: tabId,
         },
-        (stream) => {
+        (streamId) => {
           if (chrome.runtime.lastError) {
             console.error(
               "[Background] Tab capture error:",
@@ -207,18 +207,12 @@ class TranslationManager {
             return;
           }
 
-          if (!stream) {
-            reject(new Error("No stream returned from tabCapture"));
+          if (!streamId) {
+            reject(new Error("No stream ID returned from tabCapture"));
             return;
           }
 
-          // Stream will be handled in content script context
-          // We need to pass the stream to the content script
-          const streamId = stream.id || "stream-" + Date.now();
-
-          // Store stream reference
-          this.storeStreamForTab(tabId, stream);
-
+          console.log(`[Background] Got stream ID: ${streamId}`);
           resolve(streamId);
         },
       );
@@ -226,14 +220,14 @@ class TranslationManager {
   }
 
   /**
-   * Store audio stream for a tab
+   * Store stream ID for a tab
    * @param {number} tabId - The tab ID
-   * @param {MediaStream} stream - The media stream
+   * @param {string} streamId - The stream ID
    */
-  storeStreamForTab(tabId, stream) {
+  storeStreamIdForTab(tabId, streamId) {
     const session = this.activeSessions.get(tabId);
     if (session) {
-      session.mediaStream = stream;
+      session.streamId = streamId;
     }
   }
 
@@ -282,12 +276,7 @@ class TranslationManager {
 
     console.log(`[Background] Stopping session for tab ${tabId}`);
 
-    // Stop media stream
-    if (session.mediaStream) {
-      session.mediaStream.getTracks().forEach((track) => track.stop());
-    }
-
-    // Notify content script to cleanup
+    // Notify content script to cleanup (it will stop the stream)
     try {
       await chrome.tabs.sendMessage(tabId, {
         action: "stopAudioProcessor",

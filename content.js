@@ -17,6 +17,8 @@
       this.currentVideo = null; // Currently focused/active video
       this.resizeObservers = new Map();
       this.hideTimeouts = new Map();
+      this.audioProcessor = null; // Audio processor instance
+      this.mediaStream = null; // Media stream from tabCapture
     }
 
     /**
@@ -522,6 +524,19 @@
     setupMessageListener() {
       chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         switch (request.action) {
+          case "initAudioProcessor":
+            this.initializeAudioCapture(request.streamId, request.apiKey)
+              .then(() => sendResponse({ success: true }))
+              .catch((error) =>
+                sendResponse({ success: false, error: error.message }),
+              );
+            break;
+
+          case "stopAudioProcessor":
+            this.stopAudioCapture();
+            sendResponse({ success: true });
+            break;
+
           case "updateTranslation":
             if (this.currentVideo) {
               this.updateTranslation(this.currentVideo, request.translation);
@@ -581,6 +596,107 @@
      */
     generateVideoId(video) {
       return `video-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    /**
+     * Initialize audio capture with stream ID from tabCapture
+     * @param {string} streamId - The stream ID from chrome.tabCapture.getMediaStreamId()
+     * @param {string} apiKey - OpenAI API key
+     */
+    async initializeAudioCapture(streamId, apiKey) {
+      console.log(
+        "[VideoTranslator] Initializing audio capture with stream ID:",
+        streamId,
+      );
+
+      try {
+        // Get the media stream using the stream ID from tabCapture
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            mandatory: {
+              chromeMediaSource: "tab",
+              chromeMediaSourceId: streamId,
+            },
+          },
+        });
+
+        console.log("[VideoTranslator] Got media stream successfully");
+
+        // Check if AudioProcessor is available (injected by background script)
+        if (typeof window.AudioProcessor === "undefined") {
+          throw new Error("AudioProcessor not loaded");
+        }
+
+        // Create and start audio processor
+        this.audioProcessor = new window.AudioProcessor(apiKey, this.settings);
+
+        // Set up callbacks
+        this.audioProcessor.onTranslation = (translation) => {
+          if (this.currentVideo) {
+            this.updateTranslation(this.currentVideo, translation);
+          }
+        };
+
+        this.audioProcessor.onError = (error) => {
+          console.error("[VideoTranslator] Audio processor error:", error);
+          if (this.currentVideo) {
+            this.updateStatus(this.currentVideo, "Error: " + error, "error");
+          }
+        };
+
+        this.audioProcessor.onStatusChange = (text, state) => {
+          if (this.currentVideo) {
+            this.updateStatus(this.currentVideo, text, state);
+          }
+        };
+
+        // Connect to OpenAI and start processing
+        await this.audioProcessor.connect();
+        await this.audioProcessor.startProcessing(stream);
+
+        this.isActive = true;
+        this.mediaStream = stream;
+
+        console.log("[VideoTranslator] Audio capture initialized successfully");
+      } catch (error) {
+        console.error(
+          "[VideoTranslator] Failed to initialize audio capture:",
+          error,
+        );
+        if (this.currentVideo) {
+          this.updateStatus(
+            this.currentVideo,
+            "Failed to start: " + error.message,
+            "error",
+          );
+        }
+        throw error;
+      }
+    }
+
+    /**
+     * Stop audio capture and cleanup
+     */
+    stopAudioCapture() {
+      console.log("[VideoTranslator] Stopping audio capture");
+
+      if (this.audioProcessor) {
+        this.audioProcessor.stop();
+        this.audioProcessor = null;
+      }
+
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach((track) => track.stop());
+        this.mediaStream = null;
+      }
+
+      this.isActive = false;
+
+      if (this.currentVideo) {
+        this.updateStatus(this.currentVideo, "Stopped", "inactive");
+      }
+
+      console.log("[VideoTranslator] Audio capture stopped");
     }
 
     /**
