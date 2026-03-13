@@ -252,18 +252,18 @@ class TranslationManager {
         files: ["audio-processor.js"],
       });
 
-      // Send initialization message
-      const session = this.activeSessions.get(tabId);
-      if (session && session.mediaStream) {
-        // We need to pass the stream to the page context
-        // This is complex with Manifest V3, so we'll handle it differently
-        // The audio processor will request the stream
-        chrome.tabs.sendMessage(tabId, {
-          action: "initAudioProcessor",
-          apiKey,
-          streamId,
-        });
-      }
+      console.log(
+        "[Background] Audio processor script injected, sending init message",
+      );
+
+      // Send initialization message to content script
+      chrome.tabs.sendMessage(tabId, {
+        action: "initAudioProcessor",
+        apiKey,
+        streamId,
+      });
+
+      console.log("[Background] Initialization message sent");
     } catch (error) {
       console.error(
         "[Background] Failed to initialize audio processor:",

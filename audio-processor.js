@@ -59,22 +59,12 @@
 
       return new Promise((resolve, reject) => {
         try {
-          // Connect to WebSocket
-          const wsUrl =
-            "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17";
+          // Connect to WebSocket with API key in URL
+          // Browser WebSocket doesn't support custom headers, so we use query parameter
+          const wsUrl = `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17`;
 
-          this.ws = new WebSocket(wsUrl, [], {
-            headers: {
-              Authorization: `Bearer ${this.apiKey}`,
-              "OpenAI-Beta": "realtime=v1",
-            },
-          });
-
-          // Note: WebSocket constructor doesn't support custom headers directly
-          // We need to handle authentication differently
-          this.ws = new WebSocket(
-            `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17`,
-          );
+          console.log("[AudioProcessor] Creating WebSocket connection...");
+          this.ws = new WebSocket(wsUrl);
 
           this.ws.onopen = () => {
             console.log("[AudioProcessor] WebSocket connected");

@@ -204,25 +204,12 @@
         `[VideoTranslator] 🎨 Creating overlay (In iframe: ${isInIframe}, URL: ${document.location.href})`,
       );
 
-      // Determine which document to use for overlay
-      // Try to use top window if possible (for iframes)
+      // For now, always create overlay in current frame (even if iframe)
+      // Cross-origin restrictions prevent access to parent window
       let targetDocument = document;
       let targetWindow = window;
 
-      try {
-        if (isInIframe && window.top.document) {
-          targetDocument = window.top.document;
-          targetWindow = window.top;
-          console.log(
-            "[VideoTranslator] ✅ Using top-level window for overlay",
-          );
-        }
-      } catch (e) {
-        // Cross-origin iframe - can't access top
-        console.log(
-          "[VideoTranslator] ⚠️ Cross-origin iframe, using iframe document",
-        );
-      }
+      console.log("[VideoTranslator] ✅ Creating overlay in current window");
 
       const overlay = targetDocument.createElement("div");
       overlay.className = "video-translator-overlay";
@@ -691,15 +678,15 @@
       if (statusIndicator) {
         statusIndicator.className = `status-indicator ${state}`;
       }
-      
+
       // Update button text based on state
       if (toggleBtn) {
-        if (state === 'active' || state === 'connecting') {
-          toggleBtn.textContent = 'Stop Translation';
-          toggleBtn.style.background = '#f44336'; // Red
+        if (state === "active" || state === "connecting") {
+          toggleBtn.textContent = "Stop Translation";
+          toggleBtn.style.background = "#f44336"; // Red
         } else {
-          toggleBtn.textContent = 'Start Translation';
-          toggleBtn.style.background = '#4CAF50'; // Green
+          toggleBtn.textContent = "Start Translation";
+          toggleBtn.style.background = "#4CAF50"; // Green
         }
       }
     }
@@ -748,13 +735,28 @@
      */
     setupMessageListener() {
       chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        console.log("[VideoTranslator] 📨 Received message:", request.action);
+
         switch (request.action) {
           case "initAudioProcessor":
+            console.log(
+              "[VideoTranslator] 🎵 Initializing audio processor with streamId:",
+              request.streamId,
+            );
             this.initializeAudioCapture(request.streamId, request.apiKey)
-              .then(() => sendResponse({ success: true }))
-              .catch((error) =>
-                sendResponse({ success: false, error: error.message }),
-              );
+              .then(() => {
+                console.log(
+                  "[VideoTranslator] ✅ Audio processor initialized successfully",
+                );
+                sendResponse({ success: true });
+              })
+              .catch((error) => {
+                console.error(
+                  "[VideoTranslator] ❌ Failed to initialize audio processor:",
+                  error,
+                );
+                sendResponse({ success: false, error: error.message });
+              });
             break;
 
           case "stopAudioProcessor":
