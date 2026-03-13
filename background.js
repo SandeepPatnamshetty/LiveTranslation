@@ -257,6 +257,10 @@ class TranslationManager {
         });
 
         // Use getMediaStreamId for Manifest V3 compatibility
+        console.log(
+          `[Background] Calling chrome.tabCapture.getMediaStreamId for tab ${tabId}...`,
+        );
+
         chrome.tabCapture.getMediaStreamId(
           {
             targetTabId: tabId,
@@ -266,6 +270,8 @@ class TranslationManager {
               console.error(
                 "[Background] ❌ Tab capture error:",
                 chrome.runtime.lastError.message,
+                "\nFull error:",
+                chrome.runtime.lastError,
               );
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -279,7 +285,12 @@ class TranslationManager {
               return;
             }
 
-            console.log(`[Background] ✅ Got stream ID: ${streamId}`);
+            console.log(`[Background] ✅ Got stream ID:`, {
+              streamId: streamId,
+              type: typeof streamId,
+              length: streamId.length,
+              preview: streamId.substring(0, 20) + "...",
+            });
             resolve(streamId);
           },
         );

@@ -735,14 +735,32 @@
      */
     setupMessageListener() {
       chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        console.log("[VideoTranslator] 📨 Received message:", request.action);
+        const isInIframe = window.self !== window.top;
+        console.log(
+          `[VideoTranslator] 📨 Received message: ${request.action} (in iframe: ${isInIframe})`,
+        );
 
         switch (request.action) {
           case "initAudioProcessor":
-            console.log(
-              "[VideoTranslator] 🎵 Initializing audio processor with streamId:",
-              request.streamId,
-            );
+            // Only main frame should handle audio capture
+            if (isInIframe) {
+              console.log(
+                "[VideoTranslator] ⚠️ Skipping audio init in iframe (audio capture only works in main frame)",
+              );
+              sendResponse({ success: true, skipped: true, reason: "iframe" });
+              return true;
+            }
+
+            const messageAge = request.timestamp
+              ? Date.now() - request.timestamp
+              : "unknown";
+            console.log(`[VideoTranslator] 🎵 Initializing audio processor:`, {
+              streamId: request.streamId,
+              streamIdLength: request.streamId ? request.streamId.length : 0,
+              messageAge: `${messageAge}ms`,
+              apiKeyPresent: !!request.apiKey,
+            });
+
             this.initializeAudioCapture(request.streamId, request.apiKey)
               .then(() => {
                 console.log(
@@ -857,37 +875,79 @@
       }
 
       try {
-        // Get the media stream using the stream ID from tabCapture
         console.log(
-          "[VideoTranslator] Requesting media stream with constraints:",
-          {
-            audio: {
-              mandatory: {
-                chromeMediaSource: "tab",
-                chromeMediaSourceId: streamId,
-              },
-            },
+          "[VideoTranslator] ========== STARTING AUDIO CAPTURE ==========",
+        );
+        console.log("[VideoTranslator] StreamId received:", streamId);
+        console.log("[VideoTranslator] StreamId type:", typeof streamId);
+        console.log(
+          "[VideoTranslator] StreamId length:",
+          streamId ? streamId.length : 0,
+        );
+        console.log(
+          "[VideoTranslator] Is in iframe:",
+          window.self !== window.top,
+        );
+        console.log("[VideoTranslator] Window location:", window.location.href);
+        console.log("[VideoTranslator] Document state:", document.readyState);
+
+        // Try newer constraint format first (Manifest V3)
+        const constraints = {
+          audio: {
+            chromeMediaSourceId: streamId,
+            chromeMediaSource: "tab",
           },
+        };
+
+        console.log(
+          "[VideoTranslator] Using constraints:",
+          JSON.stringify(constraints, null, 2),
         );
 
-        const stream = await navigator.mediaDevices
-          .getUserMedia({
+        let stream;
+        try {
+          console.log(
+            "[VideoTranslator] Attempting getUserMedia with new format...",
+          );
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log("[VideoTranslator] ✅ SUCCESS with new format!");
+        } catch (err1) {
+          console.error("[VideoTranslator] ❌ New format failed:", {
+            name: err1.name,
+            message: err1.message,
+            constraint: err1.constraint,
+          });
+
+          // Try legacy format with mandatory
+          console.log("[VideoTranslator] Trying legacy mandatory format...");
+          const legacyConstraints = {
             audio: {
               mandatory: {
                 chromeMediaSource: "tab",
                 chromeMediaSourceId: streamId,
               },
             },
-          })
-          .catch((err) => {
-            console.error("[VideoTranslator] ❌ getUserMedia failed:", {
-              name: err.name,
-              message: err.message,
-              stack: err.stack,
-              streamId: streamId,
+          };
+
+          console.log(
+            "[VideoTranslator] Legacy constraints:",
+            JSON.stringify(legacyConstraints, null, 2),
+          );
+
+          try {
+            stream =
+              await navigator.mediaDevices.getUserMedia(legacyConstraints);
+            console.log("[VideoTranslator] ✅ SUCCESS with legacy format!");
+          } catch (err2) {
+            console.error("[VideoTranslator] ❌ Legacy format also failed:", {
+              name: err2.name,
+              message: err2.message,
+              constraint: err2.constraint,
+              stack: err2.stack,
             });
-            throw err;
-          });
+            throw err2;
+          }
+        }
 
         console.log("[VideoTranslator] ✅ Got media stream successfully", {
           streamId: stream.id,
