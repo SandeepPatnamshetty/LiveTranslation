@@ -204,7 +204,27 @@
         `[VideoTranslator] 🎨 Creating overlay (In iframe: ${isInIframe}, URL: ${document.location.href})`,
       );
 
-      const overlay = document.createElement("div");
+      // Determine which document to use for overlay
+      // Try to use top window if possible (for iframes)
+      let targetDocument = document;
+      let targetWindow = window;
+
+      try {
+        if (isInIframe && window.top.document) {
+          targetDocument = window.top.document;
+          targetWindow = window.top;
+          console.log(
+            "[VideoTranslator] ✅ Using top-level window for overlay",
+          );
+        }
+      } catch (e) {
+        // Cross-origin iframe - can't access top
+        console.log(
+          "[VideoTranslator] ⚠️ Cross-origin iframe, using iframe document",
+        );
+      }
+
+      const overlay = targetDocument.createElement("div");
       overlay.className = "video-translator-overlay";
       overlay.setAttribute("data-video-id", this.generateVideoId(video));
 
@@ -235,17 +255,34 @@
             <span class="status-indicator" style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: lime; margin-right: 8px;"></span>
             <span class="status-text">Ready</span>
           </div>
+          <button class="toggle-btn" style="margin-top: 20px; padding: 10px 30px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Start Translation
+          </button>
         </div>
       `;
 
       // Append to body (not to video parent to avoid z-index issues)
-      document.body.appendChild(overlay);
+      // Use targetDocument to create overlay in top window if in iframe
+      targetDocument.body.appendChild(overlay);
+
+      // Setup button handler
+      const toggleBtn = overlay.querySelector(".toggle-btn");
+      if (toggleBtn) {
+        toggleBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.toggleTranslation(video);
+        });
+      }
+
+      // Make overlay visible by default so user can click the button
+      overlay.style.display = "block";
 
       console.log("[VideoTranslator] 🎨 Overlay created and appended to body", {
         element: overlay,
-        isInDOM: document.body.contains(overlay),
-        computedDisplay: window.getComputedStyle(overlay).display,
-        position: window.getComputedStyle(overlay).position,
+        isInDOM: targetDocument.body.contains(overlay),
+        computedDisplay: targetWindow.getComputedStyle(overlay).display,
+        position: targetWindow.getComputedStyle(overlay).position,
+        usingTopWindow: targetDocument !== document,
       });
 
       // Setup control button handlers (removed for simplicity)
@@ -648,10 +685,22 @@
       const statusText = overlayData.element.querySelector(".status-text");
       const statusIndicator =
         overlayData.element.querySelector(".status-indicator");
+      const toggleBtn = overlayData.element.querySelector(".toggle-btn");
 
       if (statusText) statusText.textContent = text;
       if (statusIndicator) {
         statusIndicator.className = `status-indicator ${state}`;
+      }
+      
+      // Update button text based on state
+      if (toggleBtn) {
+        if (state === 'active' || state === 'connecting') {
+          toggleBtn.textContent = 'Stop Translation';
+          toggleBtn.style.background = '#f44336'; // Red
+        } else {
+          toggleBtn.textContent = 'Start Translation';
+          toggleBtn.style.background = '#4CAF50'; // Green
+        }
       }
     }
 
