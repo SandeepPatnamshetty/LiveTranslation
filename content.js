@@ -200,8 +200,10 @@
      */
     createOverlay(video) {
       const isInIframe = window.self !== window.top;
-      console.log(`[VideoTranslator] 🎨 Creating overlay (In iframe: ${isInIframe}, URL: ${document.location.href})`);
-      
+      console.log(
+        `[VideoTranslator] 🎨 Creating overlay (In iframe: ${isInIframe}, URL: ${document.location.href})`,
+      );
+
       const overlay = document.createElement("div");
       overlay.className = "video-translator-overlay";
       overlay.setAttribute("data-video-id", this.generateVideoId(video));
@@ -221,7 +223,7 @@
         border: 5px solid yellow !important;
         border-radius: 15px !important;
         box-shadow: 0 0 30px rgba(255,0,0,0.8) !important;
-        display: none !important;
+        display: none;
         min-width: 400px !important;
         text-align: center !important;
       `;
@@ -530,6 +532,36 @@
       if (this.isActive) {
         await this.stopTranslation(video);
       } else {
+        // Wait for video detection if no videos found yet
+        if (this.videos.size === 0) {
+          console.log("[VideoTranslator] ⏳ Waiting for video detection...");
+          // Try to detect videos now
+          this.detectVideos();
+
+          // Wait up to 10 seconds for video to be detected
+          for (let i = 0; i < 20; i++) {
+            if (this.videos.size > 0) {
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+
+          // Get the first video if we found one
+          if (this.videos.size > 0) {
+            video = Array.from(this.videos.keys())[0];
+            this.currentVideo = video;
+            console.log(
+              "[VideoTranslator] ✅ Video detected, starting translation",
+            );
+          } else {
+            console.error("[VideoTranslator] ❌ No video found after waiting");
+            alert(
+              "No video detected on this page. Please make sure the video is loaded and try again.",
+            );
+            return;
+          }
+        }
+
         await this.startTranslation(video);
       }
     }
@@ -542,7 +574,20 @@
       console.log("[VideoTranslator] Starting translation...");
 
       const overlayData = this.videos.get(video);
-      if (!overlayData) return;
+      if (!overlayData) {
+        console.error("[VideoTranslator] ❌ No overlay data found for video");
+        alert(
+          "Translation overlay not ready. Please reload the page and try again.",
+        );
+        return;
+      }
+
+      console.log(
+        "[VideoTranslator] ✅ Overlay data found, proceeding with capture...",
+      );
+
+      // Make overlay visible immediately
+      this.makeOverlayAlwaysVisible(video);
 
       // Update status
       this.updateStatus(video, "Starting...", "connecting");
