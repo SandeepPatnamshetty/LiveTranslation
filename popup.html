@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-Time Video Translator</title>
+    <link rel="stylesheet" href="popup-styles.css" />
+  </head>
+  <body>
+    <div class="popup-container">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <h1 class="title">
+            <svg
+              class="icon-logo"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <path
+                d="M12 14l9-5-9-5-9 5 9 5z"
+                fill="currentColor"
+                opacity="0.3"
+              />
+              <path
+                d="M12 14l6.16-3.422a12 12 0 00.012 6.574L12 20l-6.172-2.848a12 12 0 00.012-6.574L12 14z"
+                fill="currentColor"
+              />
+            </svg>
+            Video Translator
+          </h1>
+          <div class="status-badge" id="statusBadge">
+            <span class="status-dot"></span>
+            <span class="status-text">Ready</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- API Key Section -->
+      <section class="section" id="apiKeySection">
+        <div class="section-header">
+          <h2 class="section-title">OpenAI API Key</h2>
+          <button class="help-btn" id="helpBtn" title="Help">?</button>
+        </div>
+
+        <div class="input-group">
+          <input
+            type="password"
+            id="apiKeyInput"
+            placeholder="sk-..."
+            class="input"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="btn btn-icon" id="toggleApiKeyBtn" title="Show/Hide">
+            <svg width="16" height="16" viewBox="0 0 16 16">
+              <path
+                fill="currentColor"
+                d="M8 3c-3.5 0-6.32 2.5-7 6 .68 3.5 3.5 6 7 6s6.32-2.5 7-6c-.68-3.5-3.5-6-7-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm0-6.5c-1.38 0-2.5 1.12-2.5 2.5s1.12 2.5 2.5 2.5 2.5-1.12 2.5-2.5-1.12-2.5-2.5-2.5z"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" id="saveApiKeyBtn">Save</button>
+          <button class="btn btn-secondary" id="validateApiKeyBtn">
+            Validate
+          </button>
+        </div>
+
+        <div class="message" id="apiKeyMessage"></div>
+
+        <div class="help-text">
+          <a
+            href="https://platform.openai.com/api-keys"
+            target="_blank"
+            class="link"
+          >
+            Get your API key from OpenAI →
+          </a>
+        </div>
+      </section>
+
+      <!-- Settings Section -->
+      <section class="section" id="settingsSection">
+        <h2 class="section-title">Display Settings</h2>
+
+        <!-- Overlay Position -->
+        <div class="setting-group">
+          <label class="label" for="positionSelect">Overlay Position</label>
+          <select id="positionSelect" class="select">
+            <option value="bottom-center">Bottom Center</option>
+            <option value="top-center">Top Center</option>
+            <option value="bottom-left">Bottom Left</option>
+            <option value="bottom-right">Bottom Right</option>
+          </select>
+        </div>
+
+        <!-- Font Size -->
+        <div class="setting-group">
+          <label class="label" for="fontSizeSelect">Font Size</label>
+          <select id="fontSizeSelect" class="select">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+            <option value="xlarge">Extra Large</option>
+          </select>
+        </div>
+
+        <!-- Background Opacity -->
+        <div class="setting-group">
+          <label class="label" for="opacitySlider">
+            Background Opacity: <span id="opacityValue">75%</span>
+          </label>
+          <input
+            type="range"
+            id="opacitySlider"
+            min="50"
+            max="100"
+            value="75"
+            class="slider"
+          />
+        </div>
+
+        <!-- Auto Start -->
+        <div class="setting-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="autoStartCheckbox" class="checkbox" />
+            <span>Auto-start translation on video play</span>
+          </label>
+        </div>
+
+        <!-- Use Mini Model -->
+        <div class="setting-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="miniModelCheckbox" class="checkbox" />
+            <span>Use GPT-4o Mini (lower cost)</span>
+          </label>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="saveSettingsBtn">
+          Save Settings
+        </button>
+
+        <div class="message" id="settingsMessage"></div>
+      </section>
+
+      <!-- Translation Control -->
+      <section class="section section-highlight" id="controlSection">
+        <div class="control-panel">
+          <button class="btn btn-large btn-success" id="startBtn">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <path fill="currentColor" d="M6 4l8 6-8 6V4z" />
+            </svg>
+            Start Translation
+          </button>
+          <button
+            class="btn btn-large btn-danger"
+            id="stopBtn"
+            style="display: none"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <rect x="5" y="5" width="10" height="10" fill="currentColor" />
+            </svg>
+            Stop Translation
+          </button>
+        </div>
+      </section>
+
+      <!-- Translation History -->
+      <section class="section" id="historySection" style="display: none">
+        <div class="section-header">
+          <h2 class="section-title">Recent Translations</h2>
+          <button class="btn btn-small" id="clearHistoryBtn">Clear</button>
+        </div>
+
+        <div class="history-list" id="historyList">
+          <div class="empty-state">No translations yet</div>
+        </div>
+
+        <button class="btn btn-secondary btn-block" id="exportHistoryBtn">
+          Export History
+        </button>
+      </section>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <div class="footer-links">
+          <a href="#" id="aboutLink" class="link">About</a>
+          <span class="separator">•</span>
+          <a href="#" id="privacyLink" class="link">Privacy</a>
+          <span class="separator">•</span>
+          <a href="#" id="feedbackLink" class="link">Feedback</a>
+        </div>
+        <div class="version">v1.0.0</div>
+      </footer>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
