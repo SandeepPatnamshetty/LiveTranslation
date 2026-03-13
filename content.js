@@ -19,6 +19,7 @@
       this.hideTimeouts = new Map();
       this.audioProcessor = null; // Audio processor instance
       this.mediaStream = null; // Media stream from tabCapture
+      this.detectionRetryCount = 0; // Counter for video detection retries
     }
 
     /**
@@ -90,15 +91,34 @@
      * Detect all video elements on the page
      */
     detectVideos() {
-      const videos = document.querySelectorAll("video");
+      // Try multiple selectors
+      let videos = document.querySelectorAll("video");
+
+      // Also check for HTML5 video with different attributes
+      if (videos.length === 0) {
+        videos = document.querySelectorAll("video, video[src], video source");
+      }
+
+      // Check iframes for videos
+      const iframes = document.querySelectorAll("iframe");
+      console.log(`[VideoTranslator] Found ${iframes.length} iframe(s)`);
 
       // Setup new videos
       videos.forEach((video) => {
         if (!this.videos.has(video)) {
+          console.log(`[VideoTranslator] 🎬 Found video element:`, video, {
+            src: video.src,
+            currentSrc: video.currentSrc,
+            readyState: video.readyState,
+            paused: video.paused,
+            width: video.clientWidth,
+            height: video.clientHeight,
+          });
           this.setupVideo(video);
           // Set as current video if no current video exists
           if (!this.currentVideo) {
             this.currentVideo = video;
+            console.log(`[VideoTranslator] ✅ Set current video:`, video);
           }
         }
       });
@@ -110,7 +130,22 @@
         }
       });
 
-      console.log(`[VideoTranslator] Detected ${videos.length} video(s)`);
+      console.log(
+        `[VideoTranslator] Detected ${videos.length} video(s), Total videos tracked: ${this.videos.size}`,
+      );
+
+      // If no videos found, retry in 2 seconds (videos might load late)
+      if (videos.length === 0 && !this.detectionRetryCount) {
+        this.detectionRetryCount = 0;
+      }
+
+      if (videos.length === 0 && this.detectionRetryCount < 5) {
+        this.detectionRetryCount++;
+        console.log(
+          `[VideoTranslator] ⏳ No videos found, retrying in 2s (attempt ${this.detectionRetryCount}/5)...`,
+        );
+        setTimeout(() => this.detectVideos(), 2000);
+      }
     }
 
     /**
