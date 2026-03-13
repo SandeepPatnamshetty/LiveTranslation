@@ -765,8 +765,17 @@
             break;
 
           case "updateTranslation":
+            // Update translation in any frame that has a video
             if (this.currentVideo) {
+              console.log(
+                `[VideoTranslator] 📝 Updating translation (iframe: ${isInIframe}):`,
+                request.translation,
+              );
               this.updateTranslation(this.currentVideo, request.translation);
+            } else {
+              console.log(
+                `[VideoTranslator] ⚠️ No video to update translation (iframe: ${isInIframe})`,
+              );
             }
             sendResponse({ success: true });
             break;
@@ -836,8 +845,31 @@
         streamId,
       );
 
+      // Check if we're in an iframe - tab capture only works from top-level window
+      const isInIframe = window.self !== window.top;
+      if (isInIframe) {
+        console.error(
+          "[VideoTranslator] ❌ Cannot capture audio from iframe - tab capture requires top-level window",
+        );
+        throw new Error(
+          "Tab audio capture not allowed in iframes. This is a browser security restriction.",
+        );
+      }
+
       try {
         // Get the media stream using the stream ID from tabCapture
+        console.log(
+          "[VideoTranslator] Requesting media stream with constraints:",
+          {
+            audio: {
+              mandatory: {
+                chromeMediaSource: "tab",
+                chromeMediaSourceId: streamId,
+              },
+            },
+          },
+        );
+
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             mandatory: {
@@ -847,7 +879,7 @@
           },
         });
 
-        console.log("[VideoTranslator] Got media stream successfully");
+        console.log("[VideoTranslator] ✅ Got media stream successfully");
 
         // Check if AudioProcessor is available (injected by background script)
         if (typeof window.AudioProcessor === "undefined") {
@@ -859,9 +891,29 @@
 
         // Set up callbacks
         this.audioProcessor.onTranslation = (translation) => {
+          console.log(
+            "[VideoTranslator] \ud83c\udf99\ufe0f Got translation from audio processor:",
+            translation,
+          );
+
+          // Update local overlay if we have a video
           if (this.currentVideo) {
             this.updateTranslation(this.currentVideo, translation);
           }
+
+          // Also broadcast to all frames via background script
+          // This ensures iframe overlays get updated even though audio capture is in main frame
+          chrome.runtime
+            .sendMessage({
+              action: "broadcastTranslation",
+              translation: translation,
+            })
+            .catch((err) => {
+              console.log(
+                "[VideoTranslator] Could not broadcast translation:",
+                err,
+              );
+            });
         };
 
         this.audioProcessor.onError = (error) => {

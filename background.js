@@ -102,6 +102,18 @@ class TranslationManager {
           await this.saveSettings(request.settings, sendResponse);
           break;
 
+        case "broadcastTranslation":
+          // Broadcast translation to all frames (including iframes)
+          // This allows iframe overlays to receive translations even though audio capture is in main frame
+          const broadcastTabId = sender.tab?.id || (await this.getActiveTabId());
+          console.log(`[Background] Broadcasting translation to all frames of tab ${broadcastTabId}`);
+          chrome.tabs.sendMessage(broadcastTabId, {
+            action: "updateTranslation",
+            translation: request.translation
+          });
+          sendResponse({ success: true });
+          break;
+
         default:
           sendResponse({ success: false, error: "Unknown action" });
       }
@@ -245,25 +257,36 @@ class TranslationManager {
    * @param {string} apiKey - OpenAI API key
    */
   async initializeAudioProcessor(tabId, streamId, apiKey) {
-    // Inject audio processor script into the tab
+    // Inject audio processor script into the main frame ONLY (not iframes)
+    // Tab capture only works from the top-level window due to browser security
     try {
       await chrome.scripting.executeScript({
-        target: { tabId },
+        target: {
+          tabId: tabId,
+          allFrames: false, // Only inject into main frame, not iframes
+        },
         files: ["audio-processor.js"],
       });
 
       console.log(
-        "[Background] Audio processor script injected, sending init message",
+        "[Background] Audio processor script injected into main frame, sending init message",
       );
 
-      // Send initialization message to content script
-      chrome.tabs.sendMessage(tabId, {
-        action: "initAudioProcessor",
-        apiKey,
-        streamId,
-      });
+      // Send initialization message to content script in MAIN FRAME ONLY (frameId: 0)
+      // This prevents iframes from trying to capture audio (which fails due to permissions)
+      chrome.tabs.sendMessage(
+        tabId,
+        {
+          action: "initAudioProcessor",
+          apiKey,
+          streamId,
+        },
+        {
+          frameId: 0, // Target main frame only, not iframes
+        },
+      );
 
-      console.log("[Background] Initialization message sent");
+      console.log("[Background] Initialization message sent to main frame");
     } catch (error) {
       console.error(
         "[Background] Failed to initialize audio processor:",
@@ -284,10 +307,17 @@ class TranslationManager {
     console.log(`[Background] Stopping session for tab ${tabId}`);
 
     // Notify content script to cleanup (it will stop the stream)
+    // Send to main frame only since audio capture is only in main frame
     try {
-      await chrome.tabs.sendMessage(tabId, {
-        action: "stopAudioProcessor",
-      });
+      await chrome.tabs.sendMessage(
+        tabId,
+        {
+          action: "stopAudioProcessor",
+        },
+        {
+          frameId: 0, // Main frame only
+        },
+      );
     } catch (error) {
       // Tab may be closed, ignore error
       console.log("[Background] Tab not available for cleanup message");
