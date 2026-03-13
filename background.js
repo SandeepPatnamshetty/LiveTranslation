@@ -63,19 +63,26 @@ class TranslationManager {
     try {
       switch (action) {
         case "startCapture":
-          await this.startCapture(sender.tab.id, sendResponse);
+          // Get active tab if sender is popup (no tab)
+          const captureTabId = sender.tab?.id || (await this.getActiveTabId());
+          await this.startCapture(captureTabId, sendResponse);
           break;
 
         case "stopCapture":
-          await this.stopCapture(sender.tab.id, sendResponse);
+          // Get active tab if sender is popup (no tab)
+          const stopTabId = sender.tab?.id || (await this.getActiveTabId());
+          await this.stopCapture(stopTabId, sendResponse);
           break;
 
         case "getTabId":
-          sendResponse({ tabId: sender.tab.id });
+          const tabId = sender.tab?.id || (await this.getActiveTabId());
+          sendResponse({ tabId });
           break;
 
         case "getStatus":
-          sendResponse(this.getSessionStatus(request.tabId || sender.tab.id));
+          const statusTabId =
+            request.tabId || sender.tab?.id || (await this.getActiveTabId());
+          sendResponse(this.getSessionStatus(statusTabId));
           break;
 
         case "openSettings":
@@ -341,6 +348,18 @@ class TranslationManager {
       status: "active",
       duration: Date.now() - session.startTime,
     };
+  }
+
+  /**
+   * Get the active tab ID
+   * @returns {Promise<number>} The active tab ID
+   */
+  async getActiveTabId() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs && tabs.length > 0) {
+      return tabs[0].id;
+    }
+    throw new Error("No active tab found");
   }
 
   /**
