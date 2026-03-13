@@ -306,30 +306,18 @@ class TranslationManager {
    * @param {string} apiKey - OpenAI API key
    */
   async initializeAudioProcessor(tabId, streamId, apiKey) {
-    // Inject audio processor script into the main frame ONLY (not iframes)
+    // Audio processor is now pre-loaded as a content script (see manifest.json)
+    // This eliminates the 100-500ms script injection delay
     // Tab capture only works from the top-level window due to browser security
     try {
       const startTime = Date.now();
       console.log(
-        `[Background] Injecting audio processor script into tab ${tabId}...`,
-      );
-
-      await chrome.scripting.executeScript({
-        target: {
-          tabId: tabId,
-          allFrames: false, // Only inject into main frame, not iframes
-        },
-        files: ["audio-processor.js"],
-      });
-
-      const injectionTime = Date.now() - startTime;
-      console.log(
-        `[Background] Audio processor script injected in ${injectionTime}ms, sending init message IMMEDIATELY`,
+        `[Background] Sending audio processor init message to tab ${tabId} (streamId: ${streamId.substr(0, 10)}...)`,
       );
 
       // Send initialization message to content script in MAIN FRAME ONLY (frameId: 0)
       // This prevents iframes from trying to capture audio (which fails due to permissions)
-      // CRITICAL: Send this IMMEDIATELY to avoid streamId expiration (streamIds expire after ~5 seconds)
+      // CRITICAL: Send this IMMEDIATELY to avoid streamId expiration (streamIds expire quickly!)
       chrome.tabs.sendMessage(
         tabId,
         {
