@@ -118,6 +118,8 @@
      * @param {HTMLVideoElement} video - The video element to setup
      */
     setupVideo(video) {
+      console.log("[VideoTranslator] 🎬 Setting up video element:", video);
+      
       const overlay = this.createOverlay(video);
       const overlayData = {
         element: overlay,
@@ -127,24 +129,30 @@
       };
 
       this.videos.set(video, overlayData);
-
-      // Position overlay relative to video
-      this.positionOverlay(video, overlay);
-
-      // Setup ResizeObserver for dynamic positioning
-      const resizeObserver = new ResizeObserver(() => {
-        this.positionOverlay(video, overlay);
+      
+      console.log("[VideoTranslator] ✅ Video setup complete", {
+        videoElement: video,
+        overlayElement: overlay,
+        videosMapSize: this.videos.size
       });
-      resizeObserver.observe(video);
-      this.resizeObservers.set(video, resizeObserver);
 
-      // Setup hover behavior
-      this.setupHoverBehavior(video, overlayData);
+      // Position overlay relative to video (simplified for now)
+      // this.positionOverlay(video, overlay);
+
+      // Setup ResizeObserver for dynamic positioning (disabled for debugging)
+      // const resizeObserver = new ResizeObserver(() => {
+      //   this.positionOverlay(video, overlay);
+      // });
+      // resizeObserver.observe(video);
+      // this.resizeObservers.set(video, resizeObserver);
+
+      // Setup hover behavior (disabled for always-visible mode)
+      // this.setupHoverBehavior(video, overlayData);
 
       // Setup video event listeners
       this.setupVideoListeners(video, overlayData);
 
-      console.log("[VideoTranslator] Setup video:", video);
+      console.log("[VideoTranslator] Setup video complete:", video);
     }
 
     /**
@@ -157,37 +165,48 @@
       overlay.className = "video-translator-overlay";
       overlay.setAttribute("data-video-id", this.generateVideoId(video));
 
+      // SUPER SIMPLE STYLING - ignore CSS file for now
+      overlay.style.cssText = `
+        position: fixed !important;
+        bottom: 100px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        background: rgba(255, 0, 0, 0.95) !important;
+        color: white !important;
+        padding: 30px 50px !important;
+        font-size: 32px !important;
+        font-weight: bold !important;
+        z-index: 2147483647 !important;
+        border: 5px solid yellow !important;
+        border-radius: 15px !important;
+        box-shadow: 0 0 30px rgba(255,0,0,0.8) !important;
+        display: none !important;
+        min-width: 400px !important;
+        text-align: center !important;
+      `;
+
       overlay.innerHTML = `
         <div class="translation-container">
-          <div class="translation-text" style="color: white !important; font-size: 24px !important; font-weight: bold !important; background: rgba(255,0,0,0.9) !important; padding: 20px !important; border-radius: 8px !important;">Translation will appear here</div>
-          <div class="translation-status">
-            <span class="status-indicator"></span>
+          <div class="translation-text" style="color: white !important; margin: 0 !important;">Translation will appear here...</div>
+          <div class="translation-status" style="margin-top: 10px; font-size: 16px; color: yellow;">
+            <span class="status-indicator" style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: lime; margin-right: 8px;"></span>
             <span class="status-text">Ready</span>
           </div>
         </div>
-        <div class="translation-controls">
-          <button class="control-btn toggle-btn" title="Toggle Translation">
-            <svg width="16" height="16" viewBox="0 0 16 16">
-              <path fill="currentColor" d="M3 1v6h6V1H3zm2 2h2v2H5V3zm5-2v6h3V5h2V1h-5zm1 2h2v2h-2V3zM2 10v4h2v-2h2v2h2v-4H2zm9 0v2h-2v2h2v-2h4v-2h-4z"/>
-            </svg>
-          </button>
-          <button class="control-btn settings-btn" title="Settings">
-            <svg width="16" height="16" viewBox="0 0 16 16">
-              <path fill="currentColor" d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
-              <path fill="currentColor" d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
-            </svg>
-          </button>
-        </div>
       `;
-
-      // Apply user settings
-      this.applyOverlaySettings(overlay);
 
       // Append to body (not to video parent to avoid z-index issues)
       document.body.appendChild(overlay);
 
-      // Setup control button handlers
-      this.setupControlButtons(overlay, video);
+      console.log("[VideoTranslator] 🎨 Overlay created and appended to body", {
+        element: overlay,
+        isInDOM: document.body.contains(overlay),
+        computedDisplay: window.getComputedStyle(overlay).display,
+        position: window.getComputedStyle(overlay).position,
+      });
+
+      // Setup control button handlers (removed for simplicity)
+      // this.setupControlButtons(overlay, video);
 
       return overlay;
     }
@@ -390,13 +409,39 @@
         return;
       }
 
-      overlayData.element.classList.add("visible", "always-visible");
-      overlayData.isVisible = true;
-
-      // Force display for debugging
+      // FORCE DISPLAY - VERY VISIBLE!
       overlayData.element.style.display = "block";
       overlayData.element.style.opacity = "1";
       overlayData.element.style.visibility = "visible";
+      overlayData.element.classList.add("visible", "always-visible");
+      overlayData.isVisible = true;
+
+      console.log("[VideoTranslator] ✅✅✅ OVERLAY SHOULD BE VISIBLE NOW!", {
+        hasElement: !!overlayData.element,
+        isInDOM: document.body.contains(overlayData.element),
+        display: overlayData.element.style.display,
+        visibility: overlayData.element.style.visibility,
+        opacity: overlayData.element.style.opacity,
+        zIndex: overlayData.element.style.zIndex,
+        bottom: overlayData.element.style.bottom,
+        left: overlayData.element.style.left,
+        elementHTML: overlayData.element.outerHTML.substring(0, 200)
+      });
+      
+      // Extra debugging - log position relative to viewport
+      const rect = overlayData.element.getBoundingClientRect();
+      console.log("[VideoTranslator] 📍 Overlay position on screen:", {
+        top: rect.top,
+        left: rect.left,
+        bottom: rect.bottom,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+        isInViewport: rect.top >= 0 && rect.left >= 0 && 
+                      rect.bottom <= window.innerHeight && 
+                      rect.right <= window.innerWidth
+      });
+    }
 
       console.log("[VideoTranslator] ✅ Overlay made always visible", {
         hasElement: !!overlayData.element,
