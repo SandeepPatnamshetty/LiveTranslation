@@ -105,11 +105,14 @@ class TranslationManager {
         case "broadcastTranslation":
           // Broadcast translation to all frames (including iframes)
           // This allows iframe overlays to receive translations even though audio capture is in main frame
-          const broadcastTabId = sender.tab?.id || (await this.getActiveTabId());
-          console.log(`[Background] Broadcasting translation to all frames of tab ${broadcastTabId}`);
+          const broadcastTabId =
+            sender.tab?.id || (await this.getActiveTabId());
+          console.log(
+            `[Background] Broadcasting translation to all frames of tab ${broadcastTabId}`,
+          );
           chrome.tabs.sendMessage(broadcastTabId, {
             action: "updateTranslation",
-            translation: request.translation
+            translation: request.translation,
           });
           sendResponse({ success: true });
           break;
@@ -142,22 +145,38 @@ class TranslationManager {
         return;
       }
 
-      // Check if session already exists
+      // Check if session already exists - clean it up first
       if (this.activeSessions.has(tabId)) {
-        sendResponse({
-          success: false,
-          error: "Capture already active for this tab",
-        });
-        return;
+        console.log(
+          `[Background] Session already exists for tab ${tabId}, stopping it first...`,
+        );
+        await this.stopSession(tabId);
+        // Wait a moment for cleanup to complete
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       // Request tab capture permission
+      // First, make sure the tab is active to avoid "Error starting tab capture"
+      const currentTab = await chrome.tabs.get(tabId);
+      if (!currentTab.active) {
+        console.log(
+          `[Background] ⚠️ Tab ${tabId} not active, activating it now...`,
+        );
+        await chrome.tabs.update(tabId, { active: true });
+        // Wait for tab to become active
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+
       const streamId = await this.requestTabCapture(tabId);
 
       if (!streamId) {
         sendResponse({ success: false, error: "Failed to capture tab audio" });
         return;
       }
+
+      console.log(
+        `[Background] StreamId obtained, injecting audio processor immediately...`,
+      );
 
       // Create session
       const session = {
@@ -170,7 +189,7 @@ class TranslationManager {
 
       this.activeSessions.set(tabId, session);
 
-      // Initialize audio processor in the tab context
+      // Initialize audio processor in the tab context IMMEDIATELY to avoid streamId expiration
       await this.initializeAudioProcessor(tabId, streamId, apiKey);
 
       sendResponse({ success: true, streamId });
@@ -211,30 +230,60 @@ class TranslationManager {
    */
   async requestTabCapture(tabId) {
     return new Promise((resolve, reject) => {
-      // Use getMediaStreamId for Manifest V3 compatibility
-      chrome.tabCapture.getMediaStreamId(
-        {
-          targetTabId: tabId,
-        },
-        (streamId) => {
-          if (chrome.runtime.lastError) {
-            console.error(
-              "[Background] Tab capture error:",
-              chrome.runtime.lastError,
-            );
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
+      console.log(`[Background] Requesting tab capture for tab ${tabId}...`);
 
-          if (!streamId) {
-            reject(new Error("No stream ID returned from tabCapture"));
-            return;
-          }
+      // Ensure the tab is active before requesting capture
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "[Background] Error getting tab:",
+            chrome.runtime.lastError,
+          );
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
 
-          console.log(`[Background] Got stream ID: ${streamId}`);
-          resolve(streamId);
-        },
-      );
+        if (!tab.active) {
+          console.warn(
+            `[Background] ⚠️ Tab ${tabId} is not active, capture may fail`,
+          );
+        }
+
+        console.log(`[Background] Tab status:`, {
+          id: tab.id,
+          active: tab.active,
+          url: tab.url,
+          audible: tab.audible,
+        });
+
+        // Use getMediaStreamId for Manifest V3 compatibility
+        chrome.tabCapture.getMediaStreamId(
+          {
+            targetTabId: tabId,
+          },
+          (streamId) => {
+            if (chrome.runtime.lastError) {
+              console.error(
+                "[Background] ❌ Tab capture error:",
+                chrome.runtime.lastError.message,
+              );
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+
+            if (!streamId) {
+              console.error(
+                "[Background] ❌ No stream ID returned from tabCapture",
+              );
+              reject(new Error("No stream ID returned from tabCapture"));
+              return;
+            }
+
+            console.log(`[Background] ✅ Got stream ID: ${streamId}`);
+            resolve(streamId);
+          },
+        );
+      });
     });
   }
 
@@ -260,6 +309,11 @@ class TranslationManager {
     // Inject audio processor script into the main frame ONLY (not iframes)
     // Tab capture only works from the top-level window due to browser security
     try {
+      const startTime = Date.now();
+      console.log(
+        `[Background] Injecting audio processor script into tab ${tabId}...`,
+      );
+
       await chrome.scripting.executeScript({
         target: {
           tabId: tabId,
@@ -268,25 +322,30 @@ class TranslationManager {
         files: ["audio-processor.js"],
       });
 
+      const injectionTime = Date.now() - startTime;
       console.log(
-        "[Background] Audio processor script injected into main frame, sending init message",
+        `[Background] Audio processor script injected in ${injectionTime}ms, sending init message IMMEDIATELY`,
       );
 
       // Send initialization message to content script in MAIN FRAME ONLY (frameId: 0)
       // This prevents iframes from trying to capture audio (which fails due to permissions)
+      // CRITICAL: Send this IMMEDIATELY to avoid streamId expiration (streamIds expire after ~5 seconds)
       chrome.tabs.sendMessage(
         tabId,
         {
           action: "initAudioProcessor",
           apiKey,
           streamId,
+          timestamp: Date.now(), // Track when message was sent
         },
         {
           frameId: 0, // Target main frame only, not iframes
         },
       );
 
-      console.log("[Background] Initialization message sent to main frame");
+      console.log(
+        `[Background] Initialization message sent to main frame (total time: ${Date.now() - startTime}ms)`,
+      );
     } catch (error) {
       console.error(
         "[Background] Failed to initialize audio processor:",

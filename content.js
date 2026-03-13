@@ -870,16 +870,30 @@
           },
         );
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            mandatory: {
-              chromeMediaSource: "tab",
-              chromeMediaSourceId: streamId,
+        const stream = await navigator.mediaDevices
+          .getUserMedia({
+            audio: {
+              mandatory: {
+                chromeMediaSource: "tab",
+                chromeMediaSourceId: streamId,
+              },
             },
-          },
-        });
+          })
+          .catch((err) => {
+            console.error("[VideoTranslator] ❌ getUserMedia failed:", {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+              streamId: streamId,
+            });
+            throw err;
+          });
 
-        console.log("[VideoTranslator] ✅ Got media stream successfully");
+        console.log("[VideoTranslator] ✅ Got media stream successfully", {
+          streamId: stream.id,
+          audioTracks: stream.getAudioTracks().length,
+          active: stream.active,
+        });
 
         // Check if AudioProcessor is available (injected by background script)
         if (typeof window.AudioProcessor === "undefined") {
