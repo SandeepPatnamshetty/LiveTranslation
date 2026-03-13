@@ -159,7 +159,7 @@
 
       overlay.innerHTML = `
         <div class="translation-container">
-          <div class="translation-text">Hover to activate translation</div>
+          <div class="translation-text" style="color: white !important; font-size: 24px !important; font-weight: bold !important; background: rgba(255,0,0,0.9) !important; padding: 20px !important; border-radius: 8px !important;">Translation will appear here</div>
           <div class="translation-status">
             <span class="status-indicator"></span>
             <span class="status-text">Ready</span>
@@ -366,11 +366,15 @@
      */
     showOverlay(video) {
       const overlayData = this.videos.get(video);
-      if (!overlayData) return;
+      if (!overlayData) {
+        console.warn("[VideoTranslator] No overlay data for video");
+        return;
+      }
 
       this.clearHideTimeout(video);
       overlayData.element.classList.add("visible");
       overlayData.isVisible = true;
+      console.log("[VideoTranslator] Overlay shown");
     }
 
     /**
@@ -379,10 +383,27 @@
      */
     makeOverlayAlwaysVisible(video) {
       const overlayData = this.videos.get(video);
-      if (!overlayData) return;
+      if (!overlayData) {
+        console.error(
+          "[VideoTranslator] Cannot make overlay visible - no overlay data for video",
+        );
+        return;
+      }
 
       overlayData.element.classList.add("visible", "always-visible");
       overlayData.isVisible = true;
+
+      // Force display for debugging
+      overlayData.element.style.display = "block";
+      overlayData.element.style.opacity = "1";
+      overlayData.element.style.visibility = "visible";
+
+      console.log("[VideoTranslator] ✅ Overlay made always visible", {
+        hasElement: !!overlayData.element,
+        isInDOM: document.body.contains(overlayData.element),
+        classes: overlayData.element.className,
+        position: overlayData.element.style.position,
+      });
     }
 
     /**
@@ -516,11 +537,18 @@
      */
     updateTranslation(video, translation) {
       const overlayData = this.videos.get(video);
-      if (!overlayData) return;
+      if (!overlayData) {
+        console.error(
+          "[VideoTranslator] Cannot update translation - no overlay data",
+        );
+        return;
+      }
 
       const textElement =
         overlayData.element.querySelector(".translation-text");
       if (textElement) {
+        console.log("[VideoTranslator] 🗣️ Translation update:", translation);
+
         // Fade out old text
         textElement.style.opacity = "0";
 
@@ -530,7 +558,14 @@
 
           // Fade in new text
           textElement.style.opacity = "1";
+
+          console.log(
+            "[VideoTranslator] ✅ Translation displayed:",
+            translation,
+          );
         }, 150);
+      } else {
+        console.error("[VideoTranslator] No text element found in overlay");
       }
     }
 
@@ -675,7 +710,12 @@
 
         // Make overlay always visible when translation is active
         if (this.currentVideo) {
+          console.log(
+            "[VideoTranslator] Current video found, making overlay visible",
+          );
           this.makeOverlayAlwaysVisible(this.currentVideo);
+        } else {
+          console.error("[VideoTranslator] ❌ No current video set!");
         }
 
         console.log("[VideoTranslator] Audio capture initialized successfully");
