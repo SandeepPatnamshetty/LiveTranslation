@@ -3,7 +3,14 @@
   "name": "Real-Time Video Translator",
   "version": "1.0.0",
   "description": "Translate video audio to English in real-time on any website",
-  "permissions": ["tabCapture", "activeTab", "tabs", "storage", "scripting"],
+  "permissions": [
+    "tabCapture",
+    "activeTab",
+    "tabs",
+    "storage",
+    "scripting",
+    "offscreen"
+  ],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -35,7 +42,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["overlay.js"],
+      "resources": ["overlay.js", "offscreen.html", "offscreen.js"],
       "matches": ["<all_urls>"]
     }
   ],

@@ -117,6 +117,64 @@ class TranslationManager {
           sendResponse({ success: true });
           break;
 
+        // ── Messages from Offscreen Document ──────────────────────────────
+        case "translationReceived": {
+          // offscreen.js sends this when a translation is ready
+          const destTabId = request.tabId;
+          if (destTabId) {
+            console.log(
+              `[Background] Relaying translation to all frames of tab ${destTabId}:`,
+              request.translation?.slice(0, 60),
+            );
+            chrome.tabs
+              .sendMessage(destTabId, {
+                action: "updateTranslation",
+                translation: request.translation,
+              })
+              .catch(() => {});
+          }
+          sendResponse({ success: true });
+          break;
+        }
+
+        case "captureStarted":
+          sendResponse({ success: true });
+          break;
+
+        case "captureError": {
+          console.error(
+            "[Background] Capture error from offscreen:",
+            request.error,
+          );
+          // Try to notify active tab about the error
+          for (const [tid] of this.activeSessions) {
+            chrome.tabs
+              .sendMessage(tid, {
+                action: "updateStatus",
+                text: "Error: " + (request.error || "Capture failed"),
+                state: "error",
+              })
+              .catch(() => {});
+          }
+          sendResponse({ success: true });
+          break;
+        }
+
+        case "statusUpdate": {
+          // Forward status to all active tabs
+          for (const [tid] of this.activeSessions) {
+            chrome.tabs
+              .sendMessage(tid, {
+                action: "updateStatus",
+                text: request.text,
+                state: request.state,
+              })
+              .catch(() => {});
+          }
+          sendResponse({ success: true });
+          break;
+        }
+
         default:
           sendResponse({ success: false, error: "Unknown action" });
       }
@@ -263,30 +321,47 @@ class TranslationManager {
   }
 
   async initializeAudioProcessor(tabId, streamId, apiKey) {
-    const startTime = Date.now();
     console.log(
-      `[Background] Sending initAudioProcessor to tab ${tabId} main frame...`,
+      `[Background] Creating/reusing offscreen document for tab ${tabId}...`,
     );
 
-    // Send to main frame ONLY (frameId: 0) - iframes cannot capture tab audio
-    chrome.tabs.sendMessage(
-      tabId,
+    // Ensure offscreen document exists
+    let hasDoc = false;
+    try {
+      hasDoc = await chrome.offscreen.hasDocument();
+    } catch (e) {
+      console.warn("[Background] hasDocument check failed:", e.message);
+    }
+
+    if (!hasDoc) {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: ["USER_MEDIA"],
+        justification: "Capture tab audio stream for real-time translation",
+      });
+      console.log("[Background] ✅ Offscreen document created");
+    } else {
+      console.log("[Background] Offscreen document already exists, reusing");
+    }
+
+    // Send streamId and apiKey to offscreen document
+    const startTime = Date.now();
+    chrome.runtime.sendMessage(
       {
-        action: "initAudioProcessor",
-        apiKey,
+        action: "startOffscreenCapture",
         streamId,
-        timestamp: Date.now(),
+        apiKey,
+        tabId,
       },
-      { frameId: 0 },
       (response) => {
         if (chrome.runtime.lastError) {
           console.error(
-            `[Background] ❌ initAudioProcessor message failed:`,
+            "[Background] ❌ startOffscreenCapture message failed:",
             chrome.runtime.lastError.message,
           );
         } else {
           console.log(
-            `[Background] ✅ initAudioProcessor response (${Date.now() - startTime}ms):`,
+            `[Background] ✅ startOffscreenCapture response (${Date.now() - startTime}ms):`,
             response,
           );
         }
@@ -304,25 +379,34 @@ class TranslationManager {
 
     console.log(`[Background] Stopping session for tab ${tabId}`);
 
-    // Notify content script to cleanup (it will stop the stream)
-    // Send to main frame only since audio capture is only in main frame
+    // Tell offscreen document to stop capturing
     try {
-      await chrome.tabs.sendMessage(
-        tabId,
-        {
-          action: "stopAudioProcessor",
-        },
-        {
-          frameId: 0, // Main frame only
-        },
-      );
+      const hasDoc = await chrome.offscreen.hasDocument().catch(() => false);
+      if (hasDoc) {
+        await chrome.runtime
+          .sendMessage({ action: "stopOffscreenCapture" })
+          .catch(() => {});
+        await chrome.offscreen.closeDocument().catch(() => {});
+        console.log("[Background] Offscreen document closed");
+      }
     } catch (error) {
-      // Tab may be closed, ignore error
-      console.log("[Background] Tab not available for cleanup message");
+      console.log(
+        "[Background] Offscreen cleanup error (non-fatal):",
+        error.message,
+      );
     }
 
     // Remove session
     this.activeSessions.delete(tabId);
+
+    // Notify content scripts in the tab
+    chrome.tabs
+      .sendMessage(tabId, {
+        action: "updateStatus",
+        text: "Stopped",
+        state: "inactive",
+      })
+      .catch(() => {});
 
     console.log(`[Background] Session stopped for tab ${tabId}`);
   }
