@@ -96,6 +96,10 @@
       videos.forEach((video) => {
         if (!this.videos.has(video)) {
           this.setupVideo(video);
+          // Set as current video if no current video exists
+          if (!this.currentVideo) {
+            this.currentVideo = video;
+          }
         }
       });
 
@@ -366,6 +370,18 @@
 
       this.clearHideTimeout(video);
       overlayData.element.classList.add("visible");
+      overlayData.isVisible = true;
+    }
+
+    /**
+     * Make overlay always visible (when translation is active)
+     * @param {HTMLVideoElement} video - The video element
+     */
+    makeOverlayAlwaysVisible(video) {
+      const overlayData = this.videos.get(video);
+      if (!overlayData) return;
+
+      overlayData.element.classList.add("visible", "always-visible");
       overlayData.isVisible = true;
     }
 
@@ -657,6 +673,11 @@
         this.isActive = true;
         this.mediaStream = stream;
 
+        // Make overlay always visible when translation is active
+        if (this.currentVideo) {
+          this.makeOverlayAlwaysVisible(this.currentVideo);
+        }
+
         console.log("[VideoTranslator] Audio capture initialized successfully");
       } catch (error) {
         console.error(
@@ -692,7 +713,12 @@
 
       this.isActive = false;
 
+      // Hide overlay when translation stops
       if (this.currentVideo) {
+        const overlayData = this.videos.get(this.currentVideo);
+        if (overlayData) {
+          overlayData.element.classList.remove("visible", "always-visible");
+        }
         this.updateStatus(this.currentVideo, "Stopped", "inactive");
       }
 

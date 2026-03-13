@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Extension Test Page</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+      .container {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 30px;
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 2.5em;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      .status {
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        margin: 20px 0;
+        font-family: "Courier New", monospace;
+      }
+      .step {
+        background: rgba(255, 255, 255, 0.15);
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border-left: 4px solid #4caf50;
+      }
+      .success {
+        color: #4caf50;
+      }
+      .error {
+        color: #ff5252;
+      }
+      .warning {
+        color: #ffc107;
+      }
+      button {
+        background: #4caf50;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        font-size: 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin: 5px;
+        transition: background 0.3s;
+      }
+      button:hover {
+        background: #45a049;
+      }
+      video {
+        width: 100%;
+        max-width: 640px;
+        border-radius: 10px;
+        margin: 20px 0;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+      }
+      .console-output {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+        max-height: 300px;
+        overflow-y: auto;
+        margin: 20px 0;
+      }
+      .console-line {
+        padding: 3px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎥 Video Translation Extension Test</h1>
+
+      <div class="status">
+        <strong>Extension Status:</strong>
+        <span id="extensionStatus">Checking...</span>
+      </div>
+
+      <div class="step">
+        <h3>Step 1: Hard Reload the Extension</h3>
+        <ol>
+          <li>Go to <code>chrome://extensions/</code></li>
+          <li>Remove "Real-Time Video Translator"</li>
+          <li>Click "Load unpacked"</li>
+          <li>
+            Select:
+            <code>C:\SandeepKumarPatnamshetty\Projects\LiveTranslation</code>
+          </li>
+        </ol>
+      </div>
+
+      <div class="step">
+        <h3>Step 2: Open Extension Popup</h3>
+        <ol>
+          <li>Click the extension icon in your toolbar</li>
+          <li>Enter your OpenAI API key</li>
+          <li>Click "Validate" then "Save"</li>
+        </ol>
+      </div>
+
+      <div class="step">
+        <h3>Step 3: Test with Video</h3>
+        <button onclick="loadTestVideo()">Load Test Video</button>
+        <button onclick="checkExtension()">Check Extension</button>
+        <button onclick="clearConsole()">Clear Console</button>
+        <div id="videoContainer"></div>
+      </div>
+
+      <div class="step">
+        <h3>Step 4: Monitor Console Output</h3>
+        <p><strong>What to look for:</strong></p>
+        <ul>
+          <li class="success">
+            ✅ <code>[Background] Got stream ID:</code> - tabCapture working!
+          </li>
+          <li class="success">
+            ✅ <code>[VideoTranslator] Got media stream</code> - Audio capture
+            working!
+          </li>
+          <li class="success">
+            ✅ <code>[AudioProcessor] WebSocket connected</code> - OpenAI
+            connected!
+          </li>
+          <li class="error">
+            ❌ <code>chrome.tabCapture.capture is not a function</code> -
+            Extension not reloaded!
+          </li>
+        </ul>
+        <div class="console-output" id="consoleOutput">
+          <div class="console-line">
+            Open DevTools (F12) and click "Start Translation" to see logs...
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <h3>Step 5: Expected Behavior</h3>
+        <ul>
+          <li>Click extension icon → "Start Translation"</li>
+          <li>Play the video above</li>
+          <li>Hover near the bottom of the video</li>
+          <li>See real-time translations appear</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // Check if extension is loaded
+      function checkExtension() {
+        const output = document.getElementById("extensionStatus");
+
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+          try {
+            chrome.runtime.sendMessage({ action: "ping" }, (response) => {
+              if (chrome.runtime.lastError) {
+                output.innerHTML =
+                  '<span class="warning">⚠️ Extension loaded but not responding</span>';
+              } else {
+                output.innerHTML =
+                  '<span class="success">✅ Extension loaded and active!</span>';
+              }
+            });
+          } catch (e) {
+            output.innerHTML =
+              '<span class="error">❌ Extension not found</span>';
+          }
+        } else {
+          output.innerHTML =
+            '<span class="error">❌ Chrome extension API not available</span>';
+        }
+      }
+
+      // Load a test video
+      function loadTestVideo() {
+        const container = document.getElementById("videoContainer");
+        container.innerHTML = `
+                <video controls>
+                    <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <p style="margin-top: 10px;">
+                    <strong>Or test with YouTube:</strong><br>
+                    <a href="https://www.youtube.com/watch?v=jNQXAC9IVRw" target="_blank" 
+                       style="color: #4CAF50; text-decoration: underline;">
+                        Open YouTube Test Video
+                    </a>
+                </p>
+            `;
+      }
+
+      // Capture console logs
+      const originalLog = console.log;
+      const originalError = console.error;
+      const consoleOutput = document.getElementById("consoleOutput");
+      let logLines = [];
+
+      function addLogLine(message, type = "log") {
+        const line = document.createElement("div");
+        line.className = "console-line";
+        const timestamp = new Date().toLocaleTimeString();
+        const color =
+          type === "error"
+            ? "#ff5252"
+            : type === "warn"
+              ? "#ffc107"
+              : "#4CAF50";
+        line.innerHTML = `<span style="color: #888">[${timestamp}]</span> <span style="color: ${color}">${message}</span>`;
+
+        logLines.push(line);
+        if (logLines.length > 50) {
+          logLines.shift();
+        }
+
+        consoleOutput.innerHTML = "";
+        logLines.forEach((l) => consoleOutput.appendChild(l));
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      }
+
+      console.log = function (...args) {
+        originalLog.apply(console, args);
+        addLogLine(args.join(" "), "log");
+      };
+
+      console.error = function (...args) {
+        originalError.apply(console, args);
+        addLogLine(args.join(" "), "error");
+      };
+
+      function clearConsole() {
+        logLines = [];
+        consoleOutput.innerHTML =
+          '<div class="console-line">Console cleared...</div>';
+      }
+
+      // Check extension on load
+      setTimeout(checkExtension, 500);
+
+      // Log page loaded
+      console.log("[Test Page] Ready for extension testing");
+    </script>
+  </body>
+</html>
