@@ -342,14 +342,17 @@ class TranslationManager {
         },
         body: JSON.stringify({
           model: "gpt-4o-realtime-preview-2024-12-17",
-          voice: "alloy",
-          modalities: ["audio", "text"],
+          modalities: ["text"],
           instructions:
-            "You are a real-time translator. Translate the spoken audio to English. Provide only the translation, no explanations or preamble. Be concise and accurate.",
+            "You are a real-time audio translator. The user is speaking in Spanish (or another non-English language). Translate everything you hear into English. Output ONLY the translated text – no explanations, no preamble, no quotation marks.",
           input_audio_format: "pcm16",
-          output_audio_format: "pcm16",
           input_audio_transcription: { model: "whisper-1" },
-          turn_detection: null,
+          turn_detection: {
+            type: "server_vad",
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 600,
+          },
           temperature: 0.6,
         }),
       },

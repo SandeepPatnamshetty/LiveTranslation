@@ -12,7 +12,7 @@ let state = {
 
   // Media / Audio
   mediaStream: null,
-  audioElement: null,   // keeps tab audio audible while we process it
+  audioElement: null, // keeps tab audio audible while we process it
   audioContext: null,
   sourceNode: null,
   processorNode: null,
@@ -103,7 +103,10 @@ async function startCapture(streamId, ephemeralKey, tabId) {
       await state.audioElement.play();
       console.log("[Offscreen] ✅ Audio element playing – tab audio restored");
     } catch (playErr) {
-      console.warn("[Offscreen] Audio element play() failed (non-fatal):", playErr.message);
+      console.warn(
+        "[Offscreen] Audio element play() failed (non-fatal):",
+        playErr.message,
+      );
     }
   } catch (err) {
     console.error("[Offscreen] ❌ getUserMedia failed:", err);
@@ -141,8 +144,12 @@ function stopCapture() {
   }
 
   if (state.audioElement) {
-    try { state.audioElement.pause(); state.audioElement.srcObject = null; } catch (_) {}
-    if (state.audioElement.parentNode) state.audioElement.parentNode.removeChild(state.audioElement);
+    try {
+      state.audioElement.pause();
+      state.audioElement.srcObject = null;
+    } catch (_) {}
+    if (state.audioElement.parentNode)
+      state.audioElement.parentNode.removeChild(state.audioElement);
     state.audioElement = null;
   }
 
@@ -229,25 +236,31 @@ function connectWebSocket() {
 function configureSession(ws) {
   // NOTE: Authentication was already handled via WebSocket subprotocol.
   // No "auth" message needed – just configure the session.
+  //
+  // Use server_vad so OpenAI automatically detects speech boundaries and
+  // triggers responses. This removes the need for manual commit + response.create.
   ws.send(
     JSON.stringify({
       type: "session.update",
       session: {
-        modalities: ["text", "audio"],
+        modalities: ["text"], // text-only output → plain translation string
         instructions:
-          "You are a real-time translator. Translate the spoken audio to English. Provide only the translation, no explanations or preamble. Be concise and accurate.",
-        voice: "alloy",
+          "You are a real-time audio translator. The user is speaking in Spanish (or another non-English language). Translate everything you hear into English. Output ONLY the translated text – no explanations, no preamble, no quotation marks.",
         input_audio_format: "pcm16",
-        output_audio_format: "pcm16",
         input_audio_transcription: { model: "whisper-1" },
-        turn_detection: null,
+        turn_detection: {
+          type: "server_vad",
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 600,
+        },
         temperature: 0.6,
-        max_response_output_tokens: 4096,
+        max_response_output_tokens: 512,
       },
     }),
   );
 
-  console.log("[Offscreen] Session configured");
+  console.log("[Offscreen] Session configured (server_vad mode)");
 }
 
 function handleWsMessage(event) {
@@ -358,26 +371,9 @@ function startAudioProcessing(stream) {
 }
 
 function processAudioChunk(audioData) {
-  const rms = calcRMS(audioData);
-  if (rms > SILENCE_THRESHOLD) {
-    state.speechDetected = true;
-    state.silenceCounter = 0;
-  } else {
-    state.silenceCounter++;
-  }
-
-  // Push into current chunk
-  for (let i = 0; i < audioData.length; i++) {
-    state.currentChunk.push(audioData[i]);
-  }
-
-  if (state.currentChunk.length >= SAMPLES_PER_CHUNK) {
-    if (state.speechDetected) {
-      sendAudioChunk(state.currentChunk.slice());
-    }
-    state.currentChunk = [];
-    state.speechDetected = false;
-  }
+  // With server_vad, stream every chunk directly – the server decides when
+  // speech starts/ends and triggers responses automatically.
+  sendAudioChunk(audioData);
 }
 
 function sendAudioChunk(audioData) {
@@ -387,27 +383,13 @@ function sendAudioChunk(audioData) {
     const pcm16 = floatTo16BitPCM(audioData);
     const base64Audio = arrayBufferToBase64(pcm16);
 
-    // Append audio to buffer
+    // Just append – server_vad handles commit + response.create automatically
     state.ws.send(
       JSON.stringify({
         type: "input_audio_buffer.append",
         audio: base64Audio,
       }),
     );
-
-    // Request a response
-    state.ws.send(
-      JSON.stringify({
-        type: "response.create",
-        response: {
-          modalities: ["text"],
-          instructions:
-            "Translate this audio to English. Provide only the translation.",
-        },
-      }),
-    );
-
-    console.log("[Offscreen] Audio chunk sent:", base64Audio.length, "chars");
   } catch (err) {
     console.error("[Offscreen] Failed to send audio chunk:", err);
   }
