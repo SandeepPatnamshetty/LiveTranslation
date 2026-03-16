@@ -56,8 +56,7 @@ const CONFIG = {
 
   // Storage Keys
   STORAGE_KEYS: {
-    API_KEY:
-      "YOUR_OPENAI_API_KEY_HERE",
+    API_KEY: "",  // Set your OpenAI API key via the extension's Settings popup — never hardcode it here
     SETTINGS: "translator_settings",
     HISTORY: "translation_history",
     IS_ACTIVE: "is_translation_active",
